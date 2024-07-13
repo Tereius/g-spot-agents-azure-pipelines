@@ -11,7 +11,6 @@ import (
 
 	compute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
-	"cloud.google.com/go/compute/metadata"
 	"github.com/gin-gonic/gin"
 	"github.com/imroc/req/v3"
 	log "github.com/sirupsen/logrus"
@@ -70,7 +69,7 @@ func (j Job) belongsToAgent(name string) bool {
 	return false
 }
 
-func (j Job) queued() bool {
+func (j Job) waiting() bool {
 
 	return j.FinishTime == nil && j.ReceiveTime == nil
 }
@@ -80,15 +79,13 @@ func (j Job) running() bool {
 	return j.FinishTime == nil && j.ReceiveTime != nil
 }
 
-func (j Job) finished() bool {
+func (j Job) completed() bool {
 
 	return j.FinishTime != nil
 }
 
 var projectId = ""
-var projectNumber = ""
 var zone = ""
-var agents = map[string]bool{}
 var isDebug = false
 
 const API_VERSION = "6.0"
@@ -117,6 +114,15 @@ func newComputeClient() *InstanceClient {
 	}
 }
 
+func getObservedAgents() (ret map[string]int) {
+
+	ret = map[string]int{}
+	for _, v := range strings.Split(getEnvDefault("AGENTS", ""), ",") {
+		ret[v] = 0
+	}
+	return
+}
+
 func (c *InstanceClient) getInstanceState(ctx context.Context, instanceName string) (State, error) {
 
 	if res, err := c.Get(ctx, &computepb.GetInstanceRequest{
@@ -124,10 +130,10 @@ func (c *InstanceClient) getInstanceState(ctx context.Context, instanceName stri
 		Zone:     zone,
 		Instance: instanceName,
 	}); err != nil {
-		log.Errorf("Could not get status for instance %s: %s", instanceName, err.Error())
+		log.Errorf("Could not get status for instance: %s - %s", instanceName, err.Error())
 		return Unknown, err
 	} else if res.Status == nil {
-		log.Errorf("Could not read status for instance %s", instanceName)
+		log.Errorf("Could not read status for instance: %s", instanceName)
 		return Unknown, fmt.Errorf("instance status is unknown")
 	} else {
 		return (State)(*res.Status), nil
@@ -137,20 +143,20 @@ func (c *InstanceClient) getInstanceState(ctx context.Context, instanceName stri
 // blocking until instance started or failed to start
 func (c *InstanceClient) startInstance(ctx context.Context, instanceName string) error {
 
-	log.Infof("About to start instance %s", instanceName)
+	log.Infof("About to start instance: %s", instanceName)
 	if res, err := c.Start(ctx, &computepb.StartInstanceRequest{
 		Project:  projectId,
 		Zone:     zone,
 		Instance: instanceName,
 	}); err != nil {
-		log.Errorf("Could not start instance %s: %s", instanceName, err.Error())
+		log.Errorf("Could not start instance: %s - %s", instanceName, err.Error())
 		return err
 	} else {
 		if err := res.Wait(ctx); err != nil {
 			log.Errorf("Failed to wait for instance to start: %s", err.Error())
 			return err
 		} else {
-			log.Infof("Started instance %s", instanceName)
+			log.Infof("Started instance: %s", instanceName)
 		}
 	}
 	return nil
@@ -159,20 +165,20 @@ func (c *InstanceClient) startInstance(ctx context.Context, instanceName string)
 // blocking until instance started or failed to start
 func (c *InstanceClient) stopInstance(ctx context.Context, instanceName string) error {
 
-	log.Infof("About to stop instance %s", instanceName)
+	log.Infof("About to stop instance: %s", instanceName)
 	if res, err := c.Stop(ctx, &computepb.StopInstanceRequest{
 		Project:  projectId,
 		Zone:     zone,
 		Instance: instanceName,
 	}); err != nil {
-		log.Errorf("Could not stop instance %s: %s", instanceName, err.Error())
+		log.Errorf("Could not stop instance: %s - %s", instanceName, err.Error())
 		return err
 	} else {
 		if err := res.Wait(ctx); err != nil {
 			log.Errorf("Failed to wait for instance to stop: %s", err.Error())
 			return err
 		} else {
-			log.Infof("Stopped instance %s", instanceName)
+			log.Infof("Stopped instance: %s", instanceName)
 		}
 	}
 	return nil
@@ -203,22 +209,20 @@ func handlePoll(ctx *gin.Context) {
 		log.Errorf("Poll request unsuccessful: %s", resp.Status)
 		ctx.AbortWithError(http.StatusInternalServerError, fmt.Errorf(resp.Status))
 	} else if resp.IsSuccessState() {
-		startAgents := map[string]int{}
+		observedAgents := getObservedAgents()
 		for _, job := range jobs.Value {
-			if !job.finished() {
+			if !job.completed() {
 				for _, agent := range job.Agents {
-					if _, ok := agents[agent.Name]; ok {
+					if _, ok := observedAgents[agent.Name]; ok {
 						log.Infof("Found queued job for agent pool assigned to agent(s): %v", job.Agents)
-						if val, ok := startAgents[agent.Name]; ok {
-							startAgents[agent.Name] = val + 1
-						} else {
-							startAgents[agent.Name] = 1
-						}
+						observedAgents[agent.Name] += 1
+					} else {
+						log.Warnf("Found queued job using an agent (\"%s\") that is not configured for observation", agent.Name)
 					}
 				}
 			}
 		}
-		for agent, jobCount := range startAgents {
+		for agent, jobCount := range observedAgents {
 			if jobCount > 0 {
 				if state, _ := computeClient.getInstanceState(ctx, agent); state.isStopped() {
 					computeClient.startInstance(ctx, agent)
@@ -249,35 +253,21 @@ func handleWebhook(ctx *gin.Context) {
 func main() {
 
 	log.Info("Starting poll server")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if id, err := metadata.ProjectIDWithContext(ctx); err != nil {
-		panic(err)
-	} else {
-		projectId = id
-	}
 
-	if id, err := metadata.NumericProjectIDWithContext(ctx); err != nil {
-		panic(err)
-	} else {
-		projectNumber = id
-	}
+	projectId = getEnvDefault("PROJECT_ID", "default")
+	zone = getEnvDefault("ZONE", "unknown")
 
 	if _, ok := os.LookupEnv("DEBUG"); ok {
 		log.Info("Debug mode active")
 		isDebug = ok
 	}
 
-	for _, v := range strings.Split(getEnvDefault("AGENTS", ""), ",") {
-		agents[v] = true
-	}
-
-	if len(agents) <= 0 {
+	if len(getObservedAgents()) <= 0 {
 		log.Warn("No agent was given - no spot instance will be started/stopped")
 	}
 
 	authInterceptor := gin.BasicAuth(gin.Accounts{
-		getEnvDefault("USER", "ci_user"): getEnvDefault("PASSWORD", projectNumber),
+		getEnvDefault("AUTH_USER", "ci_user"): getEnvDefault("AUTH_PASSWORD", projectId),
 	})
 
 	engine := gin.New()

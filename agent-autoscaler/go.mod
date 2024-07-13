@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	cloud.google.com/go/compute v1.27.3
-	cloud.google.com/go/compute/metadata v0.5.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/imroc/req/v3 v3.43.7
 	github.com/sirupsen/logrus v1.9.3
@@ -14,6 +13,7 @@ require (
 require (
 	cloud.google.com/go/auth v0.7.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.3 // indirect
+	cloud.google.com/go/compute/metadata v0.5.0 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/bytedance/sonic v1.11.9 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
