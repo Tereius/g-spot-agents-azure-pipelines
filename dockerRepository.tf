@@ -4,6 +4,7 @@ resource "google_artifact_registry_repository" "ghcr" {
   description   = "GitHub Container Registry (ghcr)"
   format        = "DOCKER"
   mode          = "REMOTE_REPOSITORY"
+  depends_on    = [google_project_service.artifactregistry_api]
 
   remote_repository_config {
     description = "GitHub Container Registry (ghcr)"

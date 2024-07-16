@@ -1,9 +1,9 @@
 resource "google_compute_instance" "spot_instance" {
-  for_each     = toset(var.spot_agents)
-  name         = each.value
-  zone         = local.zone
-  machine_type = var.spot_machine_type
-  tags         = ["http-egress", "ssh-ingress"]
+  for_each        = toset(var.spot_agents)
+  name            = each.value
+  zone            = local.zone
+  machine_type    = var.spot_machine_type
+  tags            = ["http-egress", "ssh-ingress"]
 
   scheduling {
     preemptible                 = true

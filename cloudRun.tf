@@ -1,11 +1,11 @@
 locals {
-  auth_user = "ci_user"
+  auth_user  = "ci_user"
   basic_auth = base64encode("${local.auth_user}:${random_password.auth_password.result}")
 }
 
 resource "random_password" "auth_password" {
-  length           = 16
-  special          = true
+  length  = 16
+  special = true
 }
 
 resource "random_string" "route_poll" {
@@ -28,7 +28,7 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
   location   = local.region
   name       = "cloudrun-service"
   ingress    = "INGRESS_TRAFFIC_ALL"
-  depends_on = [google_artifact_registry_repository.ghcr]
+  depends_on = [google_artifact_registry_repository.ghcr, google_project_service.cloud_run_api]
 
   template {
     service_account                  = google_service_account.agent_autoscaler.email
