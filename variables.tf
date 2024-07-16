@@ -1,9 +1,3 @@
-variable "spot_agents_prefix" {
-  type        = string
-  description = "The name prefix every sport agent gets"
-  default     = "spot-agent"
-}
-
 variable "spot_agents" {
   type        = list(string)
   description = "Provide a list of agent names. For each name a new spot instance will be created and supervised - the names have to be unique"
@@ -22,9 +16,21 @@ variable "spot_machine_image" {
   default     = "ubuntu-os-cloud/ubuntu-minimal-2004-lts"
 }
 
+variable "gcp_organization" {
+  type        = string
+  description = "(optionally) set the parent organization id of the project (this will add a organization key to enable public access)"
+  default     = ""
+}
+
 variable "enable_ssh" {
   type        = bool
   description = "Enable SSH access"
+  default     = false
+}
+
+variable "enable_debug" {
+  type        = bool
+  description = "Enable debug messages in agent-autoscaler (WARNING: secrets will be leaked in log files)"
   default     = false
 }
 
@@ -42,6 +48,11 @@ variable "azure_devops_organization" {
 variable "azure_devops_pool" {
   type        = string
   description = "The name of the agent pool where the spot agents will join"
+}
+
+variable "azure_devops_pool_id" {
+  type        = number
+  description = "The id of the agent pool where the spot agents will join"
 }
 
 variable "azure_agent_download_url" {

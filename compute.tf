@@ -1,6 +1,7 @@
 resource "google_compute_instance" "spot_instance" {
   for_each     = toset(var.spot_agents)
-  name         = "${var.spot_agents_prefix}-${each.value}"
+  name         = each.value
+  zone         = local.zone
   machine_type = var.spot_machine_type
   tags         = ["http-egress", "ssh-ingress"]
 
@@ -35,8 +36,9 @@ resource "google_compute_instance" "spot_instance" {
   metadata_startup_script = <<EOT
 #!/bin/bash
 set -eo pipefail
-if [ ! -f '/root/setup_done_${var.spot_agents_prefix}-${each.value}' ]; then
-    echo "First time setup of agent '${var.spot_agents_prefix}-${each.value}' started"
+if [ ! -f '/root/setup_done_${each.value}' ]; then
+    echo "First time setup of agent '${each.value}' started"
+    apt-get update && apt-get -y install docker.io docker-buildx
     if [ -f '/home/agent/svc.sh' ]; then
       echo "An other agent is already running - will be uninstalled"
       pushd /home/agent
@@ -45,21 +47,25 @@ if [ ! -f '/root/setup_done_${var.spot_agents_prefix}-${each.value}' ]; then
       popd
     fi
     id -u agent &>/dev/null || useradd -d /home/agent -u 10000 agent
+    usermod -aG docker agent
+    newgrp docker
     wget -q -O /tmp/agent.tar.gz '${var.azure_agent_download_url}'
     rm -rf /home/agent &>/dev/null
     mkdir -p /home/agent
     chown -R agent:agent /home/agent
     pushd /home/agent
     sudo -u agent tar zxf /tmp/agent.tar.gz
-    sudo -u agent ./config.sh --unattended --replace --url 'https://dev.azure.com/${var.azure_devops_organization}' --auth pat --token '${var.azure_pat}' --pool '${var.azure_devops_pool}' --agent '${var.spot_agents_prefix}-${each.value}' --acceptTeeEula
+    sudo -u agent ./config.sh --unattended --replace --url 'https://dev.azure.com/${var.azure_devops_organization}' --auth pat --token '${var.azure_pat}' --pool '${var.azure_devops_pool}' --agent '${each.value}' --acceptTeeEula
+    ./bin/installdependencies.sh
     ./svc.sh install agent
     ./svc.sh start
     popd
     rm /tmp/agent.tar.gz
-    touch '/root/setup_done_${var.spot_agents_prefix}-${each.value}'
+    touch '/root/setup_done_${each.value}'
     echo "First time setup finished"
 else
-    echo "Agent '${var.spot_agents_prefix}-${each.value}' already installed - skipping"
+    echo "Agent '${each.value}' already installed - skipping"
 fi
+docker system prune -af --volumes --filter "until=$((30*24))h"
 EOT
 }

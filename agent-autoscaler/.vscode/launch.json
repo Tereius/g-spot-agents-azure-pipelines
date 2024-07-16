@@ -7,6 +7,16 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
+            "output": "agent-scaler",
+            "env": {
+                "AGENTS": "spot-agent-default",
+                "AZURE_PAT": "",
+                "AZURE_ORGANIZATION": "",
+                "AZURE_POOL_ID": "",
+                "PROJECT_ID": "",
+                "ZONE": "",
+                "DEBUG": "1"
+            }
         }
     ]
 }

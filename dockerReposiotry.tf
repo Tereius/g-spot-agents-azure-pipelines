@@ -1,9 +1,18 @@
-resource "google_artifact_registry_repository" "my-repo" {
-  location      = provider::google::region_from_id(google_compute_subnetwork.subnetwork.id)
-  repository_id = "spot-agent-ghcr"
-  description   = "Git hub container registry"
+resource "google_artifact_registry_repository" "ghcr" {
+  location      = local.region
+  repository_id = "auto-scaler-ghcr"
+  description   = "GitHub Container Registry (ghcr)"
   format        = "DOCKER"
   mode          = "REMOTE_REPOSITORY"
+
+  remote_repository_config {
+    description = "GitHub Container Registry (ghcr)"
+    docker_repository {
+      custom_repository {
+        uri = "https://ghcr.io"
+      }
+    }
+  }
 
   cleanup_policies {
     id     = "keep-one-version"
