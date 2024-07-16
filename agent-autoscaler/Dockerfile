@@ -1,9 +1,4 @@
 FROM --platform=$BUILDPLATFORM golang:1.21 as build
-LABEL org.opencontainers.image.title="agent-autoscaler"
-LABEL org.opencontainers.image.authors="Björn Stresing <bjoern.stresing@gmx.de>"
-LABEL org.opencontainers.image.description="This image provides a webserver that listens for Azure DevOps webhooks and scales compute instances if needed"
-LABEL org.opencontainers.image.source="https://github.com/Tereius/g-spot-agents-azure-pipelines"
-LABEL org.opencontainers.image.url="https://github.com/users/Tereius/packages/container/package/agent-autoscaler"
 
 WORKDIR /build
 COPY ./go.mod ./
@@ -19,6 +14,11 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -a -tags netgo,osus
 
 
 FROM scratch as run
+LABEL org.opencontainers.image.title="agent-autoscaler"
+LABEL org.opencontainers.image.authors="Björn Stresing <bjoern.stresing@gmx.de>"
+LABEL org.opencontainers.image.description="This image provides a webserver that listens for Azure DevOps webhooks and scales compute instances if needed"
+LABEL org.opencontainers.image.source="https://github.com/Tereius/g-spot-agents-azure-pipelines/tree/master/agent-autoscaler"
+LABEL org.opencontainers.image.url="https://github.com/users/Tereius/packages/container/package/agent-autoscaler"
 
 WORKDIR /rundir
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
